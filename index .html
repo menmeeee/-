@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIX キョクナビ [フルスクリーン＆音量リモコン]</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --joy-red: #e60012; --joy-blue: #00a0e9; --joy-dark: #1a1a1c; }
+        body { background-color: #eef2f3; color: #333; font-family: Arial, sans-serif; margin: 0; padding: 10px; }
+        
+        /* 全画面化に耐えるナビコンテナ */
+        #tablet-wrapper { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+        .panel { background: #fff; padding: 12px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        .connect-panel input { padding: 10px; font-size: 16px; width: 50%; border: 1px solid #ccc; border-radius: 4px; }
+        .connect-panel button { padding: 10px 12px; font-size: 14px; background: #00ccff; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        
+        .tablet-screen { background: #fff; border: 2px solid #ddd; border-radius: 12px; padding: 10px; }
+        .nav-header { background: var(--joy-red); color: white; padding: 8px 12px; border-radius: 6px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* 画面全画面化用システムボタン */
+        .nav-fs-btn { background: var(--joy-dark); color: #fff; border: none; padding: 6px 12px; font-size: 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        
+        .song-list { border: 1px solid #ddd; border-radius: 6px; height: 180px; overflow-y: auto; background: #fafafa; margin-top: 10px; }
+        .song-item { display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee; gap: 10px; }
+        .song-item img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+        .song-details { flex-grow: 1; }
+        .reserve-btn { background: var(--joy-red); color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        
+        /* 進化した音量・演奏リモコン */
+        .remote-ctrl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .ctrl-btn { padding: 12px; font-weight: bold; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; text-align: center; }
+        
+        .volume-panel { display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 8px; margin-top: 8px; background: #f0f0f4; padding: 8px; border-radius: 6px; }
+        .vol-btn { padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
+
+        .form-title { font-size: 14px; font-weight: bold; color: var(--joy-red); border-bottom: 2px solid #eee; padding-bottom: 3px; margin-top: 5px; margin-bottom: 8px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+        .form-group input, .form-group textarea { padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .btn-submit { background: #28a745; color: white; border: none; padding: 10px; width: 100%; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div id="tablet-wrapper">
+
+    <div class="panel connect-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-link"></i> 通信リンク</h3>
+            <button class="nav-fs-btn" onclick="toggleTabletFullscreen()"><i class="fa-solid fa-expand"></i> ナビを全画面化</button>
+        </div>
+        <input type="text" id="peer-id-input" placeholder="PC画面のIDを入力">
+        <button onclick="connectToPC()">接続</button>
+        <div style="font-size: 12px; margin-top: 6px;">状態: <span id="link-status" style="font-weight:bold; color:red;">未接続</span></div>
+        <button style="background:#6c757d; color:white; border:none; padding:4px 8px; font-size:11px; margin-top:5px; border-radius:3px; cursor:pointer;" onclick="sendIdViaEmail()">IDを空メールで送る</button>
+        <div style="font-size:11px; color:#777; margin-top:2px;" id="my-id-display">ID取得中...</div>
+    </div>
+
+    <div class="tablet-screen">
+        <div class="nav-header">
+            <span>キョクナビ AIX-800</span>
+            <span><i class="fa-solid fa-wifi"></i> REMOTE ACTIVE</span>
+        </div>
+
+        <div class="song-list" id="song-list-view">
+            </div>
+
+        <div class="remote-ctrl">
+            <button class="ctrl-btn" style="background:#e60012;" onclick="sendControl('stop')"><i class="fa-solid fa-square"></i> 演奏停止 (消去)</button>
+            <button class="ctrl-btn" style="background:#00a0e9;" onclick="sendControl('retry')"><i class="fa-solid fa-backward-step"></i> 最初から歌い直し</button>
+        </div>
+
+        <div class="volume-panel">
+            <button class="vol-btn" style="background:#6c757d;" onclick="sendControl('vol-mute')"><i class="fa-solid fa-volume-xmark"></i> 消音</button>
+            <button class="vol-btn" style="background:#ff9f43;" onclick="sendControl('vol-down')"><i class="fa-solid fa-volume-low"></i> 音量 🎚️ 下げる</button>
+            <button class="vol-btn" style="background:#10ac84;" onclick="sendControl('vol-up')"><i class="fa-solid fa-volume-high"></i> 音量 🎚️ 上げる</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="form-title"><i class="fa-solid fa-video"></i> ナビからオリジナルカラオケ動画を作る</div>
+        <div class="form-group">
+            <input type="text" id="vid-title" placeholder="曲名を入力">
+        </div>
+        <div class="form-group">
+            <input type="text" id="vid-artist" placeholder="歌手名を入力">
+        </div>
+        <div class="form-group">
+            <input type="text" id="vid-bg" placeholder="背景用のYouTube動画ID (空欄なら待機背景)">
+        </div>
+        <div class="form-group">
+            <textarea id="vid-lyrics" rows="3" placeholder="歌詞（改行すると順に表示されます）"></textarea>
+        </div>
+        <button class="btn-submit" onclick="makeVideoFromNav()"><i class="fa-solid fa-film"></i> 動画を作ってリストに同期</button>
+    </div>
+
+</div>
+
+    <script>
+        let myPeerId = "";
+        let currentSongs = [
+            { id: "aix_1", title: "残酷な天使のテーゼ", artist: "高橋洋子", isCustomVideo: false, ytid: "o6A7nfEs5I8", jacket: "https://picsum.photos/id/10/100/100" },
+            { id: "aix_2", title: "アイドル", artist: "YOASOBI", isCustomVideo: false, ytid: "ZRtdQ81jCUs", jacket: "https://picsum.photos/id/20/100/100" }
+        ];
+        let peer = new Peer();
+        let conn = null;
+
+        peer.on('open', (id) => { myPeerId = id; document.getElementById("my-id-display").innerText = "ナビの通信ID: " + id; });
+        window.onload = function() { renderSongs(); };
+
+        function renderSongs() {
+            const view = document.getElementById("song-list-view");
+            view.innerHTML = "";
+            currentSongs.forEach(song => {
+                const item = document.createElement("div");
+                item.className = "song-item";
+                item.innerHTML = `
+                    <img src="${song.jacket}">
+                    <div class="song-details">
+                        <div style="font-weight:bold; font-size:13px;">${song.title}</div>
+                        <div style="font-size:11px; color:#666;">${song.artist}</div>
+                    </div>
+                    <button class="reserve-btn" onclick="reserveSong('${song.id}')">予約</button>
+                `;
+                view.appendChild(item);
+            });
+        }
+
+        function connectToPC() {
+            const targetId = document.getElementById("peer-id-input").value.trim();
+            if (!targetId) return;
+            document.getElementById("link-status").innerText = "接続中...";
+            conn = peer.connect(targetId);
+            conn.on('open', () => {
+                document.getElementById("link-status").innerText = "接続完了";
+                document.getElementById("link-status").style.color = "green";
+                conn.send({ type: 'sync-database', database: currentSongs });
+            });
+            conn.on('data', (data) => {
+                if (data.type === 'sync-database') { currentSongs = data.database; renderSongs(); }
+            });
+        }
+
+        function makeVideoFromNav() {
+            const title = document.getElementById("vid-title").value.trim();
+            const artist = document.getElementById("vid-artist").value.trim();
+            const bg = document.getElementById("vid-bg").value.trim();
+            const lyricsText = document.getElementById("vid-lyrics").value;
+            if (!title || !artist) { alert("曲名と歌手名は入力してください。"); return; }
+            const lyricsArray = lyricsText.split("\n").map(line => line.trim()).filter(l => l.length > 0);
+            
+            const customVideoSong = {
+                id: "custom_" + Date.now(), title, artist, isCustomVideo: true, bgUrl: bg, lyrics: lyricsArray, jacket: `https://picsum.photos/id/45/100/100`
+            };
+            currentSongs.push(customVideoSong);
+            renderSongs();
+            document.getElementById("vid-title").value = ""; document.getElementById("vid-artist").value = "";
+            document.getElementById("vid-bg").value = ""; document.getElementById("vid-lyrics").value = "";
+            if (conn && conn.open) conn.send({ type: 'sync-database', database: currentSongs });
+        }
+
+        function reserveSong(id) {
+            if (!conn || !conn.open) { alert("PCモニターに接続されていません。"); return; }
+            const song = currentSongs.find(s => s.id === id);
+            conn.send({ type: 'reserve', song: song });
+        }
+
+        function sendControl(action) {
+            if (!conn || !conn.open) return;
+            conn.send({ type: 'control', action: action });
+        }
+
+        function sendIdViaEmail() {
+            window.location.href = `mailto:?subject=NavID&body=ID:${myPeerId}`;
+        }
+
+        // ナビ（手元端末）側をフルスクリーン化するロジック
+        function toggleTabletFullscreen() {
+            const wrapper = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (wrapper.requestFullscreen) wrapper.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+    </script>
+</body>
+</html>
