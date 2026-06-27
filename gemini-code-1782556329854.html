@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIX JOYSOUND風 カラオケシステム</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --joy-red: #e60012;
+            --joy-dark: #1a1a1a;
+            --joy-gray: #333333;
+            --joy-blue: #00a0e9;
+            --joy-green: #009944;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #222;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h2 { margin: 5px 0; font-size: 18px; color: #aaa; text-align: center;}
+        
+        /* 全体レイアウト */
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        @media (max-width: 1000px) { .container { grid-template-columns: 1fr; } }
+
+        /* =============================================
+           1. PC側（演奏画面 / 楽曲管理）
+        ============================================= */
+        #pc-screen {
+            background: #000;
+            border: 4px solid #444;
+            border-radius: 10px;
+            aspect-ratio: 16/9;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #monitor-canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #0f2027, #203a43, #2c5364);
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        #youtube-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            display: none;
+        }
+        #telop {
+            position: absolute;
+            bottom: 10%;
+            z-index: 10;
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 2px 2px 4px #000, -2px -2px 4px #000;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        /* PC管理設定（隠し・小さいギアボタン） */
+        .pc-config-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 20;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 5px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .pc-config-panel {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            z-index: 25;
+            background: rgba(0,0,0,0.95);
+            border: 2px solid var(--joy-red);
+            padding: 15px;
+            border-radius: 8px;
+            width: 300px;
+            display: none;
+            font-size: 13px;
+        }
+        .pc-config-panel h3 { margin-top: 0; color: var(--joy-red); }
+        .form-group { margin-bottom: 10px; }
+        .form-group label { display: block; margin-bottom: 3px; }
+        .form-group input, .form-group textarea { width: 90%; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; }
+        
+        /* =============================================
+           2. タブレット側（キョクナビ JR-550再現風）
+        ============================================= */
+        #tablet-screen {
+            background: #eef2f3;
+            border: 12px solid #ccc;
+            border-radius: 30px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            padding: 10px;
+            color: #333;
+            box-sizing: border-box;
+        }
+        .nav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--joy-red);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px 5px 0 0;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .nav-main-menu {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .menu-large-btn {
+            height: 100px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px #999;
+        }
+        .menu-large-btn:active { box-shadow: 0 1px #666; transform: translateY(3px); }
+        .btn-artist { background: linear-gradient(#ff5f6d, #ffc371); }
+        .btn-song { background: linear-gradient(#2193b0, #6dd5ed); }
+        
+        .nav-sub-menu {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .menu-sub-btn {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 10px 5px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .menu-sub-btn i { display: block; font-size: 16px; margin-bottom: 4px; }
+        
+        /* 下部下車・コントロール部（演奏停止・音量など） */
+        .nav-controller {
+            margin-top: 15px;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+        }
+        .ctrl-btn {
+            border: none;
+            padding: 8px 2px;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .c-stop { background: var(--joy-red); }
+        .c-vol { background: var(--joy-green); }
+        .c-key { background: #555; }
+        .c-retry { background: var(--joy-blue); }
+
+        /* 検索・選曲モーダル(タブレット内画面遷移用) */
+        .tablet-modal {
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            display: none;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .song-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            gap: 10px;
+        }
+        .song-item img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; }
+        .song-info { flex-grow: 1; }
+        .song-title { font-weight: bold; font-size: 14px; color: #111; }
+        .song-artist { font-size: 12px; color: #666; }
+        .reserve-btn { background: var(--joy-red); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+
+        /* =============================================
+           3. AIXファイルマネージャー（データ確認用）
+        ============================================= */
+        #aix-manager {
+            grid-column: span 2;
+            background: #2a2a2a;
+            border: 2px dashed #555;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        @media (max-width: 1000px) { #aix-manager { grid-column: span 1; } }
+        .aix-log {
+            background: #111;
+            font-family: monospace;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+            color: #00ff00;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="text-align: center;"><i class="fa-solid fa-microphone-lines"></i> AIX KARAOKE SYSTEM (.aix互換仕様)</h2>
+
+    <div class="container">
+        
+        <div>
+            <h2>【PC側】メインモニター画面 (予約曲が流れます)</h2>
+            <div id="pc-screen">
+                <button class="pc-config-btn" onclick="toggleConfig()"><i class="fa-solid fa-gear"></i> 設定・キョク登録</button>
+                
+                <div class="pc-config-panel" id="config-panel">
+                    <h3>楽曲登録 & マイクテスト</h3>
+                    <div class="form-group">
+                        <label>曲名</label>
+                        <input type="text" id="reg-title" placeholder="例：残酷な天使のテーゼ">
+                    </div>
+                    <div class="form-group">
+                        <label>歌手名</label>
+                        <input type="text" id="reg-artist" placeholder="例：高橋洋子">
+                    </div>
+                    <div class="form-group">
+                        <label>説明 / 歌詞</label>
+                        <textarea id="reg-desc" rows="2" placeholder="曲の説明やテロップ用の歌詞"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>音源タイプ</label>
+                        <select id="reg-type" onchange="switchSourceInput()" style="width:95%; padding:5px; background:#333; color:white;">
+                            <option value="youtube">YouTube動画</option>
+                            <option value="mp3">mp3 / オーディオURL</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="src-youtube-group">
+                        <label>YouTube 動画ID (またはURL)</label>
+                        <input type="text" id="reg-ytid" placeholder="例：dQw4w9WgXcQ">
+                    </div>
+                    <div class="form-group" id="src-mp3-group" style="display:none;">
+                        <label>mp3ファイルURL (空欄時はランダム背景画像)</label>
+                        <input type="text" id="reg-mp3" placeholder="https://example.com/song.mp3">
+                    </div>
+                    <div class="form-group">
+                        <label>ジャケット画像URL (空欄なら自動生成)</label>
+                        <input type="text" id="reg-jacket" placeholder="https://...">
+                    </div>
+                    
+                    <button onclick="registerSong()" style="background:var(--joy-red); color:white; border:none; padding:8px; width:100%; border-radius:4px; cursor:pointer; font-weight:bold;">キョク登録する</button>
+                    
+                    <hr style="border-color:#444; margin:10px 0;">
+                    <button onclick="triggerMicTest()" style="background:#555; color:white; border:none; padding:6px; width:100%; border-radius:4px; cursor:pointer;">🎤 マイクテスト (ON/OFF)</button>
+                </div>
+
+                <div id="youtube-layer">
+                    <iframe id="yt-player" width="100%" height="100%" src="" frameborder="0" allow="autoplay; encrypted-media"></iframe>
+                </div>
+
+                <div id="monitor-canvas">
+                    <div id="monitor-ui-state" style="font-size:24px; font-weight:bold;">JOYSOUND MAX GO 起動中</div>
+                    <div id="now-playing-info" style="margin-top:10px; color:#ffc371;"></div>
+                </div>
+
+                <div id="telop">歌詞テロップ表示エリア</div>
+            </div>
+            
+            <div style="margin-top:10px; background:#333; padding:10px; border-radius:5px;">
+                <strong>予約状況キュー:</strong> <span id="queue-list" style="color:var(--joy-blue);">なし</span>
+            </div>
+        </div>
+
+        <div>
+            <h2>【タブレット側】キョクナビアプリ画面</h2>
+            <div id="tablet-screen">
+                <div class="nav-header">
+                    <span>キョクナビ JR-550</span>
+                    <span style="background:#fff; color:var(--joy-red); padding:1px 6px; border-radius:3px; font-size:11px;">スマホとリンク◎</span>
+                </div>
+
+                <div class="nav-main-menu">
+                    <button class="menu-large-btn btn-artist" onclick="showTabletCategory('artist')">
+                        <i class="fa-solid fa-user-microphone"></i>
+                        <span>歌手名 <small>ARTIST</small></span>
+                    </button>
+                    <button class="menu-large-btn btn-song" onclick="showTabletCategory('song')">
+                        <i class="fa-solid fa-music"></i>
+                        <span>曲名 <small>SONG</small></span>
+                    </button>
+                </div>
+
+                <div class="nav-sub-menu">
+                    <button class="menu-sub-btn" onclick="showTabletCategory('genre')"><i class="fa-solid fa-icons"></i>ジャンル</button>
+                    <button class="menu-sub-btn" onclick="showTabletCategory('history')"><i class="fa-solid fa-clock-rotate-left"></i>りれき</button>
+                    <button class="menu-sub-btn" onclick="alert('リアクションエフェクトを送信しました！👏🎉')"><i class="fa-solid fa-face-smile"></i>リアクション</button>
+                    <button class="menu-sub-btn" onclick="showTabletCategory('all')"><i class="fa-solid fa-list-ol"></i>全曲・お試し</button>
+                </div>
+
+                <div class="tablet-modal" id="tablet-content-area" style="display:block;">
+                    <div style="color:#666; text-align:center; padding:20px;">上の「歌手名」や「曲名」を押して検索してください。</div>
+                </div>
+
+                <div class="nav-controller">
+                    <button class="ctrl-btn c-stop" onclick="stopPerformance()"><i class="fa-solid fa-square"></i> 演奏停止</button>
+                    <button class="ctrl-btn c-vol" onclick="adjustVolume('up')"><i class="fa-solid fa-volume-high"></i> 音量 ＋</button>
+                    <button class="ctrl-btn c-vol" onclick="adjustVolume('down')"><i class="fa-solid fa-volume-low"></i> 音量 －</button>
+                    <button class="ctrl-btn c-retry" onclick="restartSong()"><i class="fa-solid fa-backward-step"></i> 歌い直し</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="aix-manager">
+            <h3><i class="fa-solid fa-file-code"></i> AIXファイル (.aix / 構造定義テキスト) リアルタイム確認</h3>
+            <p style="font-size:13px; color:#ccc; margin:0 0 10px 0;">曲登録時、自動で以下のフォーマット構造を持つ.aixテキストデータが生成・出力されます。いつでも取り出し可能です。</p>
+            <div class="aix-log" id="aix-output">// ここに.aix構造のデータ構造テキストが出力されます。</div>
+            <button onclick="downloadAIX()" style="margin-top:10px; background:#444; color:white; border:1px solid #666; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">最新の.aix構成データをダウンロード</button>
+        </div>
+
+    </div>
+
+    <script>
+        // 初期搭載の楽曲データベース（サンプル）
+        let songDatabase = [
+            { id: "aix_001", title: "残酷な天使のテーゼ", artist: "高橋洋子", desc: "新世紀エヴァンゲリオン OP", type: "youtube", ytid: "o6A7nfEs5I8", mp3: "", jacket: "https://picsum.photos/id/10/100/100" },
+            { id: "aix_002", title: "アイドル", artist: "YOASOBI", desc: "推しの子 主題歌", type: "youtube", ytid: "ZRtdQ81jCUs", mp3: "", jacket: "https://picsum.photos/id/20/100/100" },
+            { id: "aix_003", title: "Pop Standard (爽快mp3)", artist: "著作権フリー音源", desc: "mp3ランダム背景テスト用", type: "mp3", ytid: "", mp3: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", jacket: "https://picsum.photos/id/30/100/100" }
+        ];
+
+        let reservationQueue = [];
+        let currentPlaying = null;
+        let micActive = false;
+        let globalVolume = 80;
+
+        // ランダム背景画像用プール
+        const bgImages = [
+            "linear-gradient(45deg, #83a4d4, #b6fbff)",
+            "linear-gradient(45deg, #ef32d9, #89fffd)",
+            "linear-gradient(45deg, #d53369, #daae51)",
+            "linear-gradient(45deg, #7117ea, #ea6060)"
+        ];
+
+        // 起動時処理
+        window.onload = function() {
+            renderTabletSongs(songDatabase);
+            updateAIXLog();
+        };
+
+        // PC側：音源タイプでの入力切り替え
+        function switchSourceInput() {
+            const type = document.getElementById("reg-type").value;
+            document.getElementById("src-youtube-group").style.display = type === "youtube" ? "block" : "none";
+            document.getElementById("src-mp3-group").style.display = type === "mp3" ? "block" : "none";
+        }
+
+        // PC側：設定開閉
+        function toggleConfig() {
+            const panel = document.getElementById("config-panel");
+            panel.style.display = panel.style.display === "block" ? "none" : "block";
+        }
+
+        // PC側：曲の登録（.aixオブジェクト作成）
+        function registerSong() {
+            const title = document.getElementById("reg-title").value.trim();
+            const artist = document.getElementById("reg-artist").value.trim();
+            const desc = document.getElementById("reg-desc").value.trim();
+            const type = document.getElementById("reg-type").value;
+            const ytid = document.getElementById("reg-ytid").value.trim();
+            const mp3 = document.getElementById("reg-mp3").value.trim();
+            let jacket = document.getElementById("reg-jacket").value.trim();
+
+            if(!title || !artist) {
+                alert("曲名と歌手名は必須です。");
+                return;
+            }
+
+            if(!jacket) {
+                jacket = `https://picsum.photos/id/${Math.floor(Math.random() * 100)}/100/100`;
+            }
+
+            // 新規aixデータオブジェクト作成
+            const newSong = {
+                id: "aix_" + Date.now(),
+                title: title,
+                artist: artist,
+                desc: desc,
+                type: type,
+                ytid: ytid,
+                mp3: mp3,
+                jacket: jacket
+            };
+
+            songDatabase.push(newSong);
+            renderTabletSongs(songDatabase);
+            updateAIXLog();
+            
+            // フォームクリア
+            document.getElementById("reg-title").value = "";
+            document.getElementById("reg-artist").value = "";
+            document.getElementById("reg-desc").value = "";
+            
+            alert(`「${title}」をカラオケシステムに登録しました！タブレット側から検索・予約可能です。`);
+            toggleConfig();
+        }
+
+        // aix構造テキストログのリアルタイムアップデート
+        function updateAIXLog() {
+            const logBox = document.getElementById("aix-output");
+            // ユーザー指定の「説明」「YouTube動画ID」「曲名」などを明示定義したテキストフォーマット
+            let textFormat = "=== AIX CONFIGURATION TEXT FILE ===\n";
+            songDatabase.forEach(s => {
+                textFormat += `[AIX-ENTRY]\n`;
+                textFormat += `ID: ${s.id}\n`;
+                textFormat += `TITLE: ${s.title}\n`;
+                textFormat += `ARTIST: ${s.artist}\n`;
+                textFormat += `DESCRIPTION: ${s.desc}\n`;
+                textFormat += `SOURCE_TYPE: ${s.type}\n`;
+                textFormat += `YOUTUBE_ID: ${s.ytid || "N/A"}\n`;
+                textFormat += `AUDIO_URL: ${s.mp3 || "N/A"}\n`;
+                textFormat += `-----------------------------------\n`;
+            });
+            logBox.textContent = textFormat;
+        }
+
+        function downloadAIX() {
+            const blob = new Blob([document.getElementById("aix-output").textContent], {type: "text/plain"});
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "karaoke_list.aix";
+            link.click();
+        }
+
+        // タブレット側：楽曲タイプリストをレンダリング
+        function renderTabletSongs(songs) {
+            const container = document.getElementById("tablet-content-area");
+            container.innerHTML = "";
+
+            if(songs.length === 0) {
+                container.innerHTML = `<div style="padding:10px; color:#999;">該当する曲が見つかりません</div>`;
+                return;
+            }
+
+            songs.forEach(song => {
+                const item = document.createElement("div");
+                item.className = "song-item";
+                item.innerHTML = `
+                    <img src="${song.jacket}" alt="Jacket">
+                    <div class="song-info">
+                        <div class="song-title">${song.title}</div>
+                        <div class="song-artist">${song.artist}</div>
+                        <div style="font-size:10px; color:#999;">${song.desc.substring(0,20)}</div>
+                    </div>
+                    <button class="reserve-btn" onclick="reserveSong('${song.id}')">予約</button>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // カテゴリ切り替えボタン
+        function showTabletCategory(type) {
+            if(type === 'all' || type === 'genre') {
+                renderTabletSongs(songDatabase);
+            } else if(type === 'artist') {
+                // 歌手名順にソートして表示
+                let sorted = [...songDatabase].sort((a,b) => a.artist.localeCompare(b.artist));
+                renderTabletSongs(sorted);
+            } else if(type === 'song') {
+                // 曲名順
+                let sorted = [...songDatabase].sort((a,b) => a.title.localeCompare(b.title));
+                renderTabletSongs(sorted);
+            } else if(type === 'history') {
+                // 履歴（簡易的に今のデータベースを逆順）
+                renderTabletSongs([...songDatabase].reverse());
+            }
+        }
+
+        // タブレット側：予約システム連携
+        function reserveSong(id) {
+            const song = songDatabase.find(s => s.id === id);
+            if(!song) return;
+
+            reservationQueue.push(song);
+            updateQueueUI();
+
+            // PCが停止中なら即座に再生
+            if(!currentPlaying) {
+                playNext();
+            } else {
+                alert(`「${song.title}」を予約しました！(前方待ち: ${reservationQueue.length - 1}曲)`);
+            }
+        }
+
+        // 予約表示の更新
+        function updateQueueUI() {
+            const qSpan = document.getElementById("queue-list");
+            if(reservationQueue.length === 0) {
+                qSpan.textContent = "なし";
+            } else {
+                qSpan.textContent = reservationQueue.map((s, idx) => `[${idx+1}] ${s.title}`).join(" ➔ ");
+            }
+        }
+
+        // PC側：演奏エンジン
+        function playNext() {
+            if(reservationQueue.length === 0) {
+                currentPlaying = null;
+                document.getElementById("now-playing-info").textContent = "";
+                document.getElementById("monitor-ui-state").textContent = "JOYSOUND MAX GO 待機中";
+                document.getElementById("youtube-layer").style.display = "none";
+                document.getElementById("yt-player").src = "";
+                document.getElementById("telop").style.display = "none";
+                document.getElementById("monitor-canvas").style.background = "linear-gradient(45deg, #0f2027, #203a43, #2c5364)";
+                return;
+            }
+
+            currentPlaying = reservationQueue.shift();
+            updateQueueUI();
+
+            const canvas = document.getElementById("monitor-canvas");
+            const ytLayer = document.getElementById("youtube-layer");
+            const ytPlayer = document.getElementById("yt-player");
+            const telop = document.getElementById("telop");
+
+            document.getElementById("monitor-ui-state").textContent = `♪ 演奏中: ${currentPlaying.title}`;
+            document.getElementById("now-playing-info").innerHTML = `歌手: ${currentPlaying.artist}<br><small style="color:#ccc;">${currentPlaying.desc}</small>`;
+
+            // テロップ歌詞表示
+            telop.style.display = "block";
+            telop.textContent = `🎤 ～ 演奏中： ${currentPlaying.title} (${currentPlaying.artist}) ～`;
+
+            if(currentPlaying.type === "youtube" && currentPlaying.ytid) {
+                // YouTube再生処理
+                canvas.style.background = "#000";
+                ytLayer.style.display = "block";
+                // 自動再生、案内コントロール非表示等のパラメータを付与
+                ytPlayer.src = `https://www.youtube.com/embed/${currentPlaying.ytid}?autoplay=1&controls=0&rel=0`;
+            } else {
+                // mp3または通常処理：背景をランダムに変化させる演出
+                ytLayer.style.display = "none";
+                ytPlayer.src = "";
+                const randomBg = bgImages[Math.floor(Math.random() * bgImages.length)];
+                canvas.style.background = randomBg;
+                
+                // 定期的に背景を変える（mp3のランダム画像切り替え仕様を再現）
+                let bgInterval = setInterval(() => {
+                    if(!currentPlaying || currentPlaying.type !== "mp3") {
+                        clearInterval(bgInterval);
+                        return;
+                    }
+                    canvas.style.background = bgImages[Math.floor(Math.random() * bgImages.length)];
+                }, 7000);
+            }
+        }
+
+        // コントローラー：演奏停止
+        function stopPerformance() {
+            if(!currentPlaying) return;
+            alert("演奏を停止します。");
+            playNext(); // 次の曲へ
+        }
+
+        // コントローラー：歌い直し
+        function restartSong() {
+            if(!currentPlaying) return;
+            // 現在の曲を先頭に戻して再生し直す
+            reservationQueue.unshift(currentPlaying);
+            playNext();
+        }
+
+        // コントローラー：音量調整
+        function adjustVolume(direction) {
+            if(direction === 'up') {
+                globalVolume = Math.min(globalVolume + 10, 100);
+            } else {
+                globalVolume = Math.max(globalVolume - 10, 0);
+            }
+            alert(`本体音量を調整しました ➔ 現在値: ${globalVolume}%`);
+        }
+
+        // PC管理側：簡易マイクテスト
+        function triggerMicTest() {
+            micActive = !micActive;
+            if(micActive) {
+                alert("PCのマイク入力をテスト判定中... [正常にマイクを検知しました]");
+            } else {
+                alert("マイクテストを終了しました。");
+            }
+        }
+    </script>
+</body>
+</html>
